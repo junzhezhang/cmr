@@ -32,7 +32,9 @@ from utils import image as image_utils
 from nnutils import train_utils
 from nnutils import loss_utils
 from nnutils import mesh_net
-from nnutils.nmr import NeuralRenderer
+# TODO junzhe option of renderer
+# from nnutils.nmr import NeuralRenderer
+from nnutils.nmr_kaolin import NeuralRenderer
 from nnutils import geom_utils
 
 flags.DEFINE_string('dataset', 'cub', 'cub or pascal or p3d')

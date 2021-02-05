@@ -11,7 +11,9 @@ from torch.autograd import Variable
 import numpy as np
 import cv2
 
-from nnutils.nmr import NeuralRenderer
+# TODO junzhe option of renderer
+# from nnutils.nmr import NeuralRenderer
+from nnutils.nmr_kaolin import NeuralRenderer
 from utils import transformations
 
 

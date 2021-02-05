@@ -19,7 +19,9 @@ import scipy.io as sio
 
 from nnutils import mesh_net
 from nnutils import geom_utils
-from nnutils.nmr import NeuralRenderer
+# TODO junzhe option of renderer
+# from nnutils.nmr import NeuralRenderer
+from nnutils.nmr_kaolin import NeuralRenderer
 from utils import bird_vis
 
 # These options are off by default, but used for some ablations reported.
