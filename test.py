@@ -1,11 +1,7 @@
 """
+Test of CMR.
+leverage from main.py
 Demo of CMR.
-
-Note that CMR assumes that the object has been detected, so please use a picture of a bird that is centered and well cropped.
-
-Sample usage:
-
-python demo.py --name bird_net --num_train_epoch 500 --img_path misc/demo_data/img1.jpg
 """
 
 from __future__ import absolute_import
@@ -22,9 +18,29 @@ from nnutils import test_utils
 from nnutils import predictor as pred_util
 from utils import image as img_util
 
-flags.DEFINE_string('demo_stem', 'demo', 'which renderer to choose')
+import os.path as osp
+import numpy as np
+import torch
+import torchvision
+from torch.autograd import Variable
+import scipy.io as sio
+from collections import OrderedDict
+
+from data import cub as cub_data
+from utils import visutil
+from utils import bird_vis
+from utils import image as image_utils
+from nnutils import train_utils
+from nnutils import loss_utils
+from nnutils import mesh_net
+
+from nnutils import geom_utils
+
 flags.DEFINE_string('renderer_opt', 'nmr', 'which renderer to choose')
-flags.DEFINE_string('img_path', 'data/im1963.jpg', 'Image to run')
+flags.DEFINE_string('dataset', 'cub', 'cub or pascal or p3d')
+flags.DEFINE_string('eval_save_dir', 'eval_save', 'which renderer to choose')
+# flags.DEFINE_string('renderer_opt', 'nmr', 'which renderer to choose')
+# flags.DEFINE_string('img_path', 'data/im1963.jpg', 'Image to run')
 flags.DEFINE_integer('img_size', 256, 'image size the network was trained on.')
 
 opts = flags.FLAGS
@@ -103,6 +119,14 @@ def visualize(img, outputs, renderer):
     plt.savefig(filename)
 
 def main(_):
+    
+    if opts.dataset == 'cub':
+        self.data_module = cub_data
+    else: 
+        raise NotImplementedError
+    print('opts.split',opts.split)
+    self.dataloader = self.data_module.data_loader(opts)
+    import ipdb; pdb.set_trace
     # import pdb; pdb.set_trace()
     # return img array (3, 257, 257)
     img = preprocess_image(opts.img_path, img_size=opts.img_size)

@@ -289,6 +289,9 @@ class MeshNet(nn.Module):
             self.texture_predictor = TexturePredictorUV(
               nz_feat, uv_sampler, opts, img_H=img_H, img_W=img_W, predict_flow=True, symmetric=opts.symmetric_texture, num_sym_faces=self.num_sym_faces)
             nb.net_init(self.texture_predictor)
+            
+            # NOTE: jz, uv_sampler for DIB-R
+            self.uv_sampler = uv_sampler
 
     def forward(self, img):
         img_feat = self.encoder.forward(img)

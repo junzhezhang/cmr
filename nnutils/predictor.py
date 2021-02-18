@@ -19,9 +19,6 @@ import scipy.io as sio
 
 from nnutils import mesh_net
 from nnutils import geom_utils
-# TODO junzhe option of renderer
-# from nnutils.nmr import NeuralRenderer
-from nnutils.nmr_kaolin import NeuralRenderer
 from utils import bird_vis
 
 # These options are off by default, but used for some ablations reported.
@@ -44,10 +41,21 @@ class MeshPredictor(object):
         self.model.eval()
         self.model = self.model.cuda(device=self.opts.gpu_id)
 
-        self.renderer = NeuralRenderer(opts.img_size)
+        # TODO junzhe option of renderer
+        print('self.opts.renderer_opt:',self.opts.renderer_opt)
+        if self.opts.renderer_opt == 'nmr':
+            from nnutils.nmr import NeuralRenderer
+        elif self.opts.renderer_opt == 'nmr_kaolin':
+            from nnutils.nmr_kaolin import NeuralRenderer
+        elif self.opts.renderer_opt == 'dibr_kaolin':
+            from nnutils.dibr_kaolin import NeuralRenderer
+        else:
+            raise NotImplementedError
+
+        self.renderer = NeuralRenderer(opts.img_size,uv_sampler=self.model.uv_sampler)
 
         if opts.texture:
-            self.tex_renderer = NeuralRenderer(opts.img_size)
+            self.tex_renderer = NeuralRenderer(opts.img_size,uv_sampler=self.model.uv_sampler)
             # Only use ambient light for tex renderer
             self.tex_renderer.ambient_light_only()
 
@@ -69,7 +77,7 @@ class MeshPredictor(object):
             faces = self.model.faces.view(1, -1, 3)
         self.faces = faces.repeat(opts.batch_size, 1, 1)
         self.vis_rend = bird_vis.VisRenderer(opts.img_size,
-                                             faces.data.cpu().numpy())
+                                             faces.data.cpu().numpy(), self.opts,uv_sampler=self.model.uv_sampler)
         self.vis_rend.set_bgcolor([1., 1., 1.])
 
         self.resnet_transform = torchvision.transforms.Normalize(
@@ -113,11 +121,15 @@ class MeshPredictor(object):
         return self.collect_outputs()
 
     def forward(self):
+        # print('predict forward')
+        # print('self.opts.texture:',self.opts.texture)
+        # print('self.opts.use_sfm_camera:',self.opts.use_sfm_camera)
         if self.opts.texture:
             pred_codes, self.textures = self.model.forward(self.input_imgs)
+            # print('--tex from model:',self.textures.shape) # [B, 1280, 6, 6, 2]
         else:
             pred_codes = self.model.forward(self.input_imgs)
-
+        
         self.delta_v, scale, trans, quat = pred_codes
 
         if self.opts.use_sfm_camera:
@@ -149,20 +161,24 @@ class MeshPredictor(object):
                                                     self.cam_pred)
         self.mask_pred = self.renderer.forward(self.pred_v, self.faces,
                                                self.cam_pred)
-
+        # import pdb; pdb.set_trace()
         # Render texture.
         if self.opts.texture and not self.opts.use_sfm_ms:
             if self.textures.size(-1) == 2:
                 # Flow texture!
                 self.texture_flow = self.textures
+                # print('--tex b4 sample:',self.textures.shape)
                 self.textures = geom_utils.sample_textures(self.textures,
                                                            self.imgs)
+                # print('--tex after sample:',self.textures.shape)
             if self.textures.dim() == 5:  # B x F x T x T x 3
                 tex_size = self.textures.size(2)
+                # print('--tex b4 unsqueeze:',self.textures.shape)
                 self.textures = self.textures.unsqueeze(4).repeat(1, 1, 1, 1,
                                                                   tex_size, 1)
-
+                # print('--tex after unsqueeze:',self.textures.shape)
             # Render texture:
+            # texture_pred is rendered img
             self.texture_pred = self.tex_renderer.forward(
                 self.pred_v, self.faces, self.cam_pred, textures=self.textures)
 

@@ -24,7 +24,7 @@ class NeuralRenderer(torch.nn.Module):
     Every torch NMR has a chainer NMR.
     Only fwd/bwd once per iteration.
     """
-    def __init__(self, img_size=256):
+    def __init__(self, img_size=256,uv_sampler=None):
         super(NeuralRenderer, self).__init__()
         self.renderer = neural_renderer.Renderer()
 

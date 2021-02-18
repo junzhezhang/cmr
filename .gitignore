@@ -143,3 +143,5 @@ examples/data/example2_optimization.gif
 kaolin/
 PerceptualSimilarity/
 misc/CUB_200_2011/
+vis/
+

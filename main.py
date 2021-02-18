@@ -32,11 +32,10 @@ from utils import image as image_utils
 from nnutils import train_utils
 from nnutils import loss_utils
 from nnutils import mesh_net
-# TODO junzhe option of renderer
-# from nnutils.nmr import NeuralRenderer
-from nnutils.nmr_kaolin import NeuralRenderer
+
 from nnutils import geom_utils
 
+flags.DEFINE_string('renderer_opt', 'nmr', 'which renderer to choose')
 flags.DEFINE_string('dataset', 'cub', 'cub or pascal or p3d')
 # Weights:
 flags.DEFINE_float('kp_loss_wt', 30., 'keypoint loss weight')
@@ -51,6 +50,8 @@ flags.DEFINE_boolean('use_gtpose', True, 'if true uses gt pose for projection, b
 
 opts = flags.FLAGS
 
+
+
 curr_path = osp.dirname(osp.abspath(__file__))
 cache_path = osp.join(curr_path, '..', 'misc', 'cachedir')
 
@@ -61,6 +62,15 @@ def hook(module, grad_input, grad_output):
 class ShapeTrainer(train_utils.Trainer):
     def define_model(self):
         opts = self.opts
+        # TODO junzhe option of renderer
+        if opts.renderer_opt == 'nmr':
+            from nnutils.nmr import NeuralRenderer
+        elif opts.renderer_opt == 'nmr_kaolin':
+            from nnutils.nmr_kaolin import NeuralRenderer
+        elif opts.renderer_opt == 'dibr_kaolin':
+            from nnutils.dibr_kaolin import NeuralRenderer
+        else:
+            raise NotImplementedError
 
         # ----------
         # Options
@@ -87,17 +97,17 @@ class ShapeTrainer(train_utils.Trainer):
         # For renderering.
         faces = self.model.faces.view(1, -1, 3)
         self.faces = faces.repeat(opts.batch_size, 1, 1)
-        self.renderer = NeuralRenderer(opts.img_size)
-        self.renderer_predcam = NeuralRenderer(opts.img_size) #for camera loss via projection
+        self.renderer = NeuralRenderer(opts.img_size,uv_sampler=self.model.uv_sampler)
+        self.renderer_predcam = NeuralRenderer(opts.img_size,uv_sampler=self.model.uv_sampler) #for camera loss via projection
 
         # Need separate NMR for each fwd/bwd call.
         if opts.texture:
-            self.tex_renderer = NeuralRenderer(opts.img_size)
+            self.tex_renderer = NeuralRenderer(opts.img_size,uv_sampler=self.model.uv_sampler)
             # Only use ambient light for tex renderer
             self.tex_renderer.ambient_light_only()
 
         # For visualization
-        self.vis_rend = bird_vis.VisRenderer(opts.img_size, faces.data.cpu().numpy())
+        self.vis_rend = bird_vis.VisRenderer(opts.img_size, faces.data.cpu().numpy(),self.opts,uv_sampler=self.model.uv_sampler)
 
         # import ipdb
         # ipdb.set_trace()

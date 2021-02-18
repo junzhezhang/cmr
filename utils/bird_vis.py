@@ -11,9 +11,6 @@ from torch.autograd import Variable
 import numpy as np
 import cv2
 
-# TODO junzhe option of renderer
-# from nnutils.nmr import NeuralRenderer
-from nnutils.nmr_kaolin import NeuralRenderer
 from utils import transformations
 
 
@@ -23,8 +20,18 @@ class VisRenderer(object):
     faces are F x 3 or 1 x F x 3 numpy
     """
 
-    def __init__(self, img_size, faces, t_size=3):
-        self.renderer = NeuralRenderer(img_size)
+    def __init__(self, img_size, faces, opts, t_size=3,uv_sampler=None):
+        self.opts = opts
+        # TODO junzhe option of renderer
+        if self.opts.renderer_opt == 'nmr':
+            from nnutils.nmr import NeuralRenderer
+        elif self.opts.renderer_opt == 'nmr_kaolin':
+            from nnutils.nmr_kaolin import NeuralRenderer
+        elif self.opts.renderer_opt == 'dibr_kaolin':
+            from nnutils.dibr_kaolin import NeuralRenderer
+        else:
+            raise NotImplementedError
+        self.renderer = NeuralRenderer(img_size,uv_sampler=uv_sampler)
         self.faces = Variable(
             torch.IntTensor(faces).cuda(), requires_grad=False)
         if self.faces.dim() == 2:

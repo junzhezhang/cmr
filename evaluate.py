@@ -22,6 +22,7 @@ from nnutils import predictor as pred_utils
 from utils.bird_vis import convert2np
 
 flags.DEFINE_boolean('visualize', False, 'if true visualizes things')
+flags.DEFINE_string('renderer_opt', 'nmr', 'which renderer to choose')
 
 opts = flags.FLAGS
 
@@ -79,48 +80,86 @@ class ShapeTester(test_utils.Tester):
 
         return iou, kps_err, kps_vis
 
-    def visualize(self, outputs, batch):
+    def visualize(self, outputs, batch, stem='temp',output_dir='./vis/val'):
         vert = outputs['verts'][0]
         cam = outputs['cam_pred'][0]
         texture = outputs['texture'][0]
 
         img_pred = self.renderer(vert, cam, texture=texture)
-        aroundz = []
-        aroundy = []
+        # aroundz = []
+        # aroundy = []
+        rendz = self.renderer.diff_vp(
+                vert, cam, angle=-60, axis=[1, 0, 0], texture=texture)
+        rendy = self.renderer.diff_vp(
+                vert, cam, angle=60, axis=[0, 1, 0], texture=texture)
         # for deg in np.arange(0, 180, 30):
-        for deg in np.arange(0, 150, 30):
-            rendz = self.renderer.diff_vp(
-                vert, cam, angle=-deg, axis=[1, 0, 0], texture=texture)
-            rendy = self.renderer.diff_vp(
-                vert, cam, angle=deg, axis=[0, 1, 0], texture=texture)
-            aroundz.append(rendz)
-            aroundy.append(rendy)
-
-        aroundz = np.hstack(aroundz)
-        aroundy = np.hstack(aroundy)
-        vps = np.vstack((aroundz, aroundy))
+        # for deg in np.arange(0, 150, 30):
+        #     rendz = self.renderer.diff_vp(
+        #         vert, cam, angle=-deg, axis=[1, 0, 0], texture=texture)
+        #     rendy = self.renderer.diff_vp(
+        #         vert, cam, angle=deg, axis=[0, 1, 0], texture=texture)
+        #     aroundz.append(rendz)
+        #     aroundy.append(rendy)
+        #     break
+        # import pdb; pdb.set_trace()
+        # aroundz = np.hstack(aroundz)
+        # aroundy = np.hstack(aroundy)
+        # vps = np.vstack((aroundz, aroundy))
+        # print('res:',img_pred.shape,rendz.shape,rendy.shape)
 
         img = np.transpose(convert2np(batch['img'][0]), (1, 2, 0))
         import matplotlib.pyplot as plt
         plt.ion()
-        fig = plt.figure(1)
-        ax = fig.add_subplot(121)
-        ax.imshow(img)
-        ax.set_title('input')
-        ax.axis('off')
-        ax = fig.add_subplot(122)
-        ax.imshow(img_pred)
-        ax.set_title('pred_texture')
-        ax.axis('off')
-        plt.draw()
-
-        fig = plt.figure(2)
-        plt.imshow(vps)
+        plt.figure(1)
+        plt.clf()
+        plt.subplot(221)
+        plt.imshow(img)
+        plt.title('input')
+        plt.axis('off')
+        plt.subplot(222)
+        plt.imshow(img_pred)
+        plt.title('pred v1')
+        plt.axis('off')
+        plt.subplot(223)
+        plt.imshow(rendz)
+        plt.title('pred v2')
+        plt.axis('off')
+        plt.subplot(224)
+        plt.imshow(rendy)
+        plt.title('pred v3')
         plt.axis('off')
         plt.draw()
-        plt.pause(0.01)
-        import ipdb
-        ipdb.set_trace()
+        plt.show()
+        
+        print('img range and shape',img.shape,img.max())
+        
+        # plt.ion()
+        # fig = plt.figure(1)
+        # ax = fig.add_subplot(121)
+        # ax.imshow(img)
+        # ax.set_title('input')
+        # ax.axis('off')
+        # ax = fig.add_subplot(122)
+        # ax.imshow(img_pred)
+        # ax.set_title('pred_texture')
+        # ax.axis('off')
+        # plt.draw()
+
+        # fig = plt.figure(2)
+        # plt.imshow(vps)
+        # plt.axis('off')
+        # plt.draw()
+        # plt.pause(0.01)
+        # import ipdb
+        # ipdb.set_trace()
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)    
+        filename = os.path.join(output_dir,stem+'.png')
+        plt.savefig(filename)
+        print('writen', stem, 'in',filename)
+        # if int(stem)> 9:
+            # print('exit')
+            # exit()
 
     def test(self):
         opts = self.opts
@@ -148,8 +187,9 @@ class ShapeTester(test_utils.Tester):
                 if opts.max_eval_iter > 0 and (i >= opts.max_eval_iter):
                     break
                 outputs = self.predictor.predict(batch)
+                # import pdb; pdb.set_trace()
                 if opts.visualize:
-                    self.visualize(outputs, batch)
+                    self.visualize(outputs, batch,stem=str(i))
                 iou, kp_err, kp_vis = self.evaluate(outputs, batch)
 
                 bench_stats['ious'].append(iou)
