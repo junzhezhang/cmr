@@ -35,6 +35,9 @@ flags.DEFINE_string('upconv_mode', 'bilinear', 'upsample mode')
 
 flags.DEFINE_boolean('only_mean_sym', False, 'If true, only the meanshape is symmetric')
 
+flags.DEFINE_string('tex_mode', '', 'baseline, IF, IF_FLOW')
+
+
 
 #------------- Modules ------------#
 #----------------------------------#
@@ -88,6 +91,41 @@ class Encoder(nn.Module):
 
         return feat
 
+class ImplicitTexFlow(nn.Module):
+    """
+    NOTE: done by junzhe on Mar 2, 2021
+    equivalent to TexturePredictorUV
+    implicitly output xy coordinates for UV flow.
+    """
+    def __init__(self, nz_feat, uv_sampler, opts, img_H=64, img_W=128, n_upconv=5, nc_init=256, predict_flow=False, symmetric=False, num_sym_faces=624):
+        # NOTE: many of the arguments are not used.
+        super(ImplicitTexFlow, self).__init__()
+        self.symmetric = symmetric
+        self.predict_flow = predict_flow
+        self.num_sym_faces = num_sym_faces
+
+        from .tex_decoder import DecoderEachLayerCFlow
+        self.tex_flow_decoder = DecoderEachLayerCFlow(z_dim=200, dim=2)
+        # uv_sampler # [B, F, T, T, 2] output is uv coordinates
+        self.B = uv_sampler.size(0)
+        self.F = uv_sampler.size(1)
+        self.T = uv_sampler.size(2)
+        self.uv_sampler = uv_sampler.view(self.B,-1,2).permute([0,2,1]) # flat
+        
+        # raise NotImplementedError
+    
+    def forward(self, feat):
+        tex = self.tex_flow_decoder(p=self.uv_sampler, z=feat, dummy=None)
+        tex_pred = tex.view(self.B, 2,self.F,self.T,self.T).permute([0,2,3,4,1])
+        # raise NotImplementedError
+        # import pdb; pdb.set_trace()
+        if self.symmetric:
+            # Symmetrize.
+            tex_left = tex_pred[:, -self.num_sym_faces:]
+            return torch.cat([tex_pred, tex_left], 1)
+        else:
+            # Contiguous Needed after the permute..
+            return tex_pred.contiguous()
 
 class TexturePredictorUV(nn.Module):
     """
@@ -115,15 +153,16 @@ class TexturePredictorUV(nn.Module):
         self.decoder = nb.decoder2d(n_upconv, None, nc_init, init_fc=False, nc_final=nc_final, use_deconv=opts.use_deconv, upconv_mode=opts.upconv_mode)
 
     def forward(self, feat):
-        # pdb.set_trace()
-        uvimage_pred = self.enc.forward(feat)
+        
+        uvimage_pred = self.enc.forward(feat) # [B, 200] --> [B, 8192]
         uvimage_pred = uvimage_pred.view(uvimage_pred.size(0), self.nc_init, self.feat_H, self.feat_W)
-        # B x 2 or 3 x H x W
+        # B x 2 or 3 x H x W  # ([16, 256, 4, 8])
         self.uvimage_pred = self.decoder.forward(uvimage_pred)
-        self.uvimage_pred = torch.tanh(self.uvimage_pred)
+        self.uvimage_pred = torch.tanh(self.uvimage_pred) # ([16, 2, 128, 256])
 
         tex_pred = torch.nn.functional.grid_sample(self.uvimage_pred, self.uv_sampler, align_corners=True)
         tex_pred = tex_pred.view(uvimage_pred.size(0), -1, self.F, self.T, self.T).permute(0, 2, 3, 4, 1)
+        import pdb; pdb.set_trace()
 
         if self.symmetric:
             # Symmetrize.
@@ -225,6 +264,7 @@ class MeshNet(nn.Module):
         super(MeshNet, self).__init__()
         self.opts = opts
         self.pred_texture = opts.texture
+        self.tex_mode = opts.tex_mode
         self.symmetric = opts.symmetric
         self.symmetric_texture = opts.symmetric_texture
 
@@ -274,24 +314,44 @@ class MeshNet(nn.Module):
         self.code_predictor = CodePredictor(nz_feat=nz_feat, num_verts=self.num_output)
 
         if self.pred_texture:
-            if self.symmetric_texture:
-                num_faces = self.num_indept_faces + self.num_sym_faces
-            else:
-                num_faces = faces.shape[0]
+            if self.tex_mode == 'IF_FLOW':
+                # import pdb; pdb.set_trace()
+                if self.symmetric_texture:
+                    num_faces = self.num_indept_faces + self.num_sym_faces
+                else:
+                    num_faces = faces.shape[0]
 
-            uv_sampler = mesh.compute_uvsampler(verts_np, faces_np[:num_faces], tex_size=opts.tex_size)
-            # F' x T x T x 2
-            uv_sampler = Variable(torch.FloatTensor(uv_sampler).cuda(), requires_grad=False)
-            # B x F' x T x T x 2
-            uv_sampler = uv_sampler.unsqueeze(0).repeat(self.opts.batch_size, 1, 1, 1, 1)
-            img_H = int(2**np.floor(np.log2(np.sqrt(num_faces) * opts.tex_size)))
-            img_W = 2 * img_H
-            self.texture_predictor = TexturePredictorUV(
-              nz_feat, uv_sampler, opts, img_H=img_H, img_W=img_W, predict_flow=True, symmetric=opts.symmetric_texture, num_sym_faces=self.num_sym_faces)
-            nb.net_init(self.texture_predictor)
-            
-            # NOTE: jz, uv_sampler for DIB-R
-            self.uv_sampler = uv_sampler
+                uv_sampler = mesh.compute_uvsampler(verts_np, faces_np[:num_faces], tex_size=opts.tex_size)
+                # F' x T x T x 2
+                uv_sampler = Variable(torch.FloatTensor(uv_sampler).cuda(), requires_grad=False)
+                # B x F' x T x T x 2
+                uv_sampler = uv_sampler.unsqueeze(0).repeat(self.opts.batch_size, 1, 1, 1, 1)
+                img_H = int(2**np.floor(np.log2(np.sqrt(num_faces) * opts.tex_size)))
+                img_W = 2 * img_H
+                self.texture_predictor = ImplicitTexFlow(
+                nz_feat, uv_sampler, opts, img_H=img_H, img_W=img_W, predict_flow=True, symmetric=opts.symmetric_texture, num_sym_faces=self.num_sym_faces)
+                nb.net_init(self.texture_predictor)
+
+                self.uv_sampler = uv_sampler
+            else:
+                if self.symmetric_texture:
+                    num_faces = self.num_indept_faces + self.num_sym_faces
+                else:
+                    num_faces = faces.shape[0]
+
+                uv_sampler = mesh.compute_uvsampler(verts_np, faces_np[:num_faces], tex_size=opts.tex_size)
+                # F' x T x T x 2
+                uv_sampler = Variable(torch.FloatTensor(uv_sampler).cuda(), requires_grad=False)
+                # B x F' x T x T x 2
+                uv_sampler = uv_sampler.unsqueeze(0).repeat(self.opts.batch_size, 1, 1, 1, 1)
+                img_H = int(2**np.floor(np.log2(np.sqrt(num_faces) * opts.tex_size)))
+                img_W = 2 * img_H
+                self.texture_predictor = TexturePredictorUV(
+                nz_feat, uv_sampler, opts, img_H=img_H, img_W=img_W, predict_flow=True, symmetric=opts.symmetric_texture, num_sym_faces=self.num_sym_faces)
+                nb.net_init(self.texture_predictor)
+                
+                # NOTE: jz, uv_sampler for DIB-R
+                self.uv_sampler = uv_sampler
 
     def forward(self, img):
         img_feat = self.encoder.forward(img)

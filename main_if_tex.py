@@ -32,6 +32,8 @@ from utils import image as image_utils
 from nnutils import train_utils
 from nnutils import loss_utils
 from nnutils import mesh_net
+from nnutils import tex_decoder
+
 
 from nnutils import geom_utils
 
@@ -55,11 +57,11 @@ opts = flags.FLAGS
 curr_path = osp.dirname(osp.abspath(__file__))
 cache_path = osp.join(curr_path, '..', 'misc', 'cachedir')
 
-def hook(module, grad_input, grad_output):
-    print(str(module),grad_input.shape,grad_input.device,grad_output.shape,grad_output.device)
-    return grad_input
+# def hook(module, grad_input, grad_output):
+#     print(str(module),grad_input.shape,grad_input.device,grad_output.shape,grad_output.device)
+#     return grad_input
 
-class ShapeTrainer(train_utils.Trainer):
+class ShapeTrainer_IF_Tex(train_utils.Trainer):
     def define_model(self):
         opts = self.opts
         # TODO junzhe option of renderer
@@ -88,6 +90,10 @@ class ShapeTrainer(train_utils.Trainer):
             self.load_network(self.model, 'pred', opts.num_pretrain_epochs)
 
         self.model = self.model.cuda(device=opts.gpu_id)
+
+        ### Implicit Tex decoder
+        self.tex_decoder = tex_decoder.DecoderEachLayerC(c_dim=128, z_dim=128, dim=3,
+                 hidden_size=128)
 
         # Data structures to use for triangle priors.
         edges2verts = self.model.edges2verts
@@ -174,19 +180,7 @@ class ShapeTrainer(train_utils.Trainer):
     def forward(self):
         opts = self.opts
         if opts.texture:
-            
             pred_codes, self.textures = self.model(self.input_imgs)
-            
-            # import pdb; pdb.set_trace()
-            ### see the uv range
-            uvmax = torch.max(torch.max(torch.max(torch.max(self.textures,0)[0],0)[0],0)[0],0)[0]
-            uvmin = torch.min(torch.min(torch.min(torch.min(self.textures,0)[0],0)[0],0)[0],0)[0]
-            self.umax = max(uvmax[0].item(),self.umax)
-            self.umin = min(uvmin[0].item(),self.umin)
-            self.vmax = max(uvmax[1].item(),self.vmax)
-            self.vmin = min(uvmin[1].item(),self.vmin)
-            # print('u:',self.umin, self.umax)
-            # print('v:',self.vmin, self.vmax)
         else:
             pred_codes = self.model(self.input_imgs)
         self.delta_v, scale, trans, quat = pred_codes

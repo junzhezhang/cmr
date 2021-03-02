@@ -67,6 +67,12 @@ class Trainer():
             for k in dir(opts):
                 f.write('{}: {}\n'.format(k, opts.__getattr__(k)))
 
+        ###
+        self.umax = -100 
+        self.umin = 100
+        self.vmax = -100
+        self.vmin = 100
+
 
     # helper saving function that can be used by subclasses
     def save_network(self, network, network_label, epoch_label, gpu_id=None):
