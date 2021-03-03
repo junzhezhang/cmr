@@ -153,7 +153,9 @@ class Trainer():
 
         for epoch in range(opts.num_pretrain_epochs, opts.num_epochs):
             epoch_iter = 0
+            tic = time.time()
             for i, batch in enumerate(self.dataloader):
+                
                 iter_start_time = time.time()
                 self.set_input(batch)
                 if not self.invalid_batch:
@@ -185,6 +187,9 @@ class Trainer():
 
                 if total_steps == opts.num_iter:
                     return
+                
+                # print('time spent:{:3.2f}'.format(time.time()-tic))
+                tic = time.time()
 
             if (epoch+1) % opts.save_epoch_freq == 0:
                 print('saving the model at the end of epoch {:d}, iters {:d}'.format(epoch, total_steps))

@@ -34,6 +34,7 @@ from nnutils import loss_utils
 from nnutils import mesh_net
 
 from nnutils import geom_utils
+import time
 
 flags.DEFINE_string('renderer_opt', 'nmr', 'which renderer to choose')
 flags.DEFINE_string('dataset', 'cub', 'cub or pascal or p3d')

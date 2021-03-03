@@ -182,12 +182,18 @@ class MeshPredictor(object):
             self.texture_pred = self.tex_renderer.forward(
                 self.pred_v, self.faces, self.cam_pred, textures=self.textures)
 
-            # B x 2 x H x W
-            uv_flows = self.model.texture_predictor.uvimage_pred
-            # B x H x W x 2
-            self.uv_flows = uv_flows.permute(0, 2, 3, 1)
-            self.uv_images = torch.nn.functional.grid_sample(self.imgs,
-                                self.uv_flows, align_corners=True)
+            # TODO junzhe, 'ImplicitTexFlow' object has no attribute 'uvimage_pred'
+            try:
+                # B x 2 x H x W
+                uv_flows = self.model.texture_predictor.uvimage_pred
+                # B x H x W x 2
+                self.uv_flows = uv_flows.permute(0, 2, 3, 1)
+                self.uv_images = torch.nn.functional.grid_sample(self.imgs,
+                                    self.uv_flows, align_corners=True)
+            except: 
+                # import pdb; pdb.set_trace()
+                self.uv_images = torch.ones_like(self.texture_pred)
+                self.uv_flows = torch.ones_like(self.texture_pred)
         else:
             self.textures = None
 
